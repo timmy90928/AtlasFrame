@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "atlasframe",
+  "compatibility_date": "2026-08-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "vinext/server/fetch-handler",
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  },
+  "cache": { "enabled": true },
+  "r2_buckets": [
+    { "binding": "PHOTOS_BUCKET", "bucket_name": "atlasframe-originals" }
+  ],
+  "images": { "binding": "IMAGES" },
+  "vars": {
+    "APP_ORIGIN": "https://atlasframe.1888atch25.workers.dev",
+    "AUTH_API_ORIGIN": "https://api.1888atch25.workers.dev",
+    "AUTH_CLIENT_ID": "atlasframe",
+    "R2_BUCKET_NAME": "atlasframe-originals"
+  }
+}

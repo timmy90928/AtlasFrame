@@ -1,0 +1,6 @@
+import Link from "next/link";
+import { SiteHeader } from "@/components/layout/site-header";
+
+export default function Home() {
+  return <><SiteHeader /><main className="page"><section className="hero"><div><div className="eyebrow">Geospatial photography journal</div><h1>Every frame<br />has a place.</h1><p>AtlasFrame 把攝影、地點與時間放在同一張地圖上。每個地方，只留下你最想代表它的一張照片。</p><div className="hero-actions"><Link className="button" href="/login">開始你的地圖</Link><a className="button ghost" href="#manifesto">閱讀理念</a></div></div><div className="hero-map" aria-label="AtlasFrame 地圖視覺示意"><i className="pin one" /><i className="pin two" /><i className="pin three" /><span className="map-label a">Iceland · 64.15° N</span><span className="map-label b">Taipei · 25.03° N</span><span className="map-label c">Kyoto · 35.01° N</span></div></section><section id="manifesto" className="manifesto"><h2>One person.<br />One place.<br />One frame.</h2><p>這不是把所有照片堆進相簿，而是用一張照片，記下你如何看見一個地方。每次回到地圖，都能看見自己走過的世界。</p></section><section className="metrics"><div className="metric"><strong>Photo ↔ Place</strong><span>代表照片與 Canonical Place</span></div><div className="metric"><strong>Original ↔ Editable</strong><span>EXIF 與平台位置永遠分離</span></div><div className="metric"><strong>Map ↔ Memory</strong><span>從地圖回到每一個畫面</span></div></section></main></>;
+}
