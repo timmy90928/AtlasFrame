@@ -1,5 +1,5 @@
 import { createLocalJWKSet, jwtVerify, type JSONWebKeySet } from "jose";
-import { getAuthRuntimeEnv } from "@/lib/env";
+import { getAuthRuntimeEnv, getAuthService } from "@/lib/env";
 import { ApiError } from "@/lib/http";
 import { createAdminClient } from "@/lib/supabase/server";
 
@@ -35,7 +35,10 @@ function authSubject(origin: string, subject: string) {
 function invalidAccessTokenError(error: unknown) {
   const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
   if (code === "ERR_JWT_EXPIRED") return new ApiError(401, "AUTH_TOKEN_EXPIRED", "登入憑證已過期，請重新登入。");
-  if (code === "ERR_JWS_INVALID") return new ApiError(401, "AUTH_TOKEN_SIGNATURE_INVALID", "登入憑證的簽章無法驗證，請重新登入。");
+  if (code === "ERR_JWS_INVALID" || code === "ERR_JWS_SIGNATURE_VERIFICATION_FAILED" || code === "ERR_JOSE_ALG_NOT_ALLOWED") {
+    return new ApiError(401, "AUTH_TOKEN_SIGNATURE_INVALID", "登入憑證的簽章無法驗證，請重新登入。");
+  }
+  if (code === "ERR_JWT_INVALID") return new ApiError(401, "AUTH_TOKEN_FORMAT_INVALID", "登入憑證格式無效，請重新登入。");
   if (code === "ERR_JWT_CLAIM_VALIDATION_FAILED") return new ApiError(401, "AUTH_TOKEN_CLAIMS_INVALID", "登入憑證不適用於 AtlasFrame，請重新登入。");
   if (code === "ERR_JWKS_NO_MATCHING_KEY" || code === "ERR_JWKS_INVALID") return new ApiError(503, "AUTH_JWKS_UNAVAILABLE", "帳號服務的驗證金鑰暫時無法使用，請稍後再試。");
   return new ApiError(401, "AUTH_INVALID", "登入狀態已失效，請重新登入。");
@@ -43,11 +46,21 @@ function invalidAccessTokenError(error: unknown) {
 
 async function getAuthJwks(origin: string): Promise<ReturnType<typeof createLocalJWKSet>> {
   if (localJwks && localJwksOrigin === origin && Date.now() - localJwksLoadedAt < jwksRefreshMs) return localJwks;
-  const response = await fetch(new URL("/api/auth/jwks.json", origin), {
-    headers: { accept: "application/json, application/jwk-set+json" },
-  });
+  let response: Response;
+  try {
+    response = await getAuthService().fetch(new Request(new URL("/api/auth/jwks.json", origin), {
+      headers: { accept: "application/json, application/jwk-set+json" },
+    }));
+  } catch {
+    throw new ApiError(503, "AUTH_JWKS_UNAVAILABLE", "帳號服務的驗證金鑰暫時無法使用，請稍後再試。");
+  }
   if (!response.ok) throw new ApiError(503, "AUTH_JWKS_UNAVAILABLE", "帳號服務的驗證金鑰暫時無法使用，請稍後再試。");
-  const jwks = await response.json() as JSONWebKeySet;
+  let jwks: JSONWebKeySet;
+  try {
+    jwks = await response.json() as JSONWebKeySet;
+  } catch {
+    throw new ApiError(503, "AUTH_JWKS_UNAVAILABLE", "帳號服務的驗證金鑰暫時無法使用，請稍後再試。");
+  }
   localJwks = createLocalJWKSet(jwks);
   localJwksOrigin = origin;
   localJwksLoadedAt = Date.now();

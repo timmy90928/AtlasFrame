@@ -48,3 +48,7 @@ export function getAuthRuntimeEnv() {
 export function getBindings(): Pick<CloudflareEnv, "PHOTOS_BUCKET" | "IMAGES"> {
   return cloudflareEnv as unknown as Pick<CloudflareEnv, "PHOTOS_BUCKET" | "IMAGES">;
 }
+
+export function getAuthService(): CloudflareEnv["AUTH_SERVICE"] {
+  return (cloudflareEnv as unknown as CloudflareEnv).AUTH_SERVICE;
+}

@@ -13,6 +13,9 @@
   "r2_buckets": [
     { "binding": "PHOTOS_BUCKET", "bucket_name": "atlasframe-originals" }
   ],
+  "services": [
+    { "binding": "AUTH_SERVICE", "service": "api" }
+  ],
   "images": { "binding": "IMAGES" },
   "vars": {
     "APP_ORIGIN": "https://atlasframe.1888atch25.workers.dev",

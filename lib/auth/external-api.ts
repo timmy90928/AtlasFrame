@@ -1,4 +1,4 @@
-import { getAuthRuntimeEnv } from "@/lib/env";
+import { getAuthRuntimeEnv, getAuthService } from "@/lib/env";
 import { ApiError } from "@/lib/http";
 
 type ExternalError = { error?: string };
@@ -7,11 +7,11 @@ export type MfaResult = { mfaRequired: true; challenge: string } | { mfaRequired
 
 async function externalJson<T>(path: string, body: Record<string, string>) {
   const runtime = getAuthRuntimeEnv();
-  const response = await fetch(new URL(path, runtime.AUTH_API_ORIGIN), {
+  const response = await getAuthService().fetch(new Request(new URL(path, runtime.AUTH_API_ORIGIN), {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify(body),
-  });
+  }));
   const data = await response.json().catch(() => ({})) as T & ExternalError;
   return { response, data };
 }

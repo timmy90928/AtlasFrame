@@ -13,7 +13,10 @@ export function CallbackClient() {
   async function finish() {
     const response = await fetch("/api/profile");
     const body = await response.json() as ProfileResponse;
-    if (response.ok && body.data?.profile) { window.location.assign("/upload"); return; }
+    if (response.ok) {
+      if (body.data?.profile) { window.location.assign("/upload"); return; }
+      setStep("create"); setMessage("選一個用於個人地圖網址的使用者名稱。"); return;
+    }
     if (response.status === 403) { setStep("error"); setMessage(body.error?.message ?? "此帳號尚未受邀。 "); return; }
     if (response.status === 404) { setStep("create"); setMessage("選一個用於個人地圖網址的使用者名稱。"); return; }
     setStep("error"); setMessage(body.error?.message ?? "登入狀態已失效，請重新登入。");
