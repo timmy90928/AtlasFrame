@@ -5,7 +5,7 @@ import { FormEvent, useState } from "react";
 type LoginResponse = { data?: { mfaRequired?: boolean; challenge?: string }; error?: { message?: string } };
 
 async function post(path: string, body: Record<string, string>) {
-  const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const response = await fetch(path, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const payload = await response.json() as LoginResponse;
   if (!response.ok) throw new Error(payload.error?.message ?? "登入失敗。 ");
   return payload.data ?? {};

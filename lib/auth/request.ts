@@ -42,9 +42,12 @@ export async function requireUser(request: Request): Promise<AuthenticatedUser> 
     const { payload } = await jwtVerify(token, remoteJwks, { audience: runtime.AUTH_CLIENT_ID, algorithms: ["ES256"] });
     const subject = typeof payload.sub === "string" ? payload.sub : "";
     const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
-    if (!subject || !email || payload.email_verified !== true) throw new Error("missing required identity claims");
+    if (!subject || !email) throw new ApiError(401, "AUTH_INVALID", "登入憑證缺少必要身分資訊，請重新登入。");
+    if (payload.email_verified !== true) throw new ApiError(403, "AUTH_EMAIL_UNVERIFIED", "請先在帳號服務完成 email 驗證，再回來登入 AtlasFrame。");
     return { subject: authSubject(runtime.AUTH_API_ORIGIN, subject), email, emailVerified: true };
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.warn("AtlasFrame access token validation failed", { name: error instanceof Error ? error.name : "UnknownError" });
     throw new ApiError(401, "AUTH_INVALID", "登入狀態已失效，請重新登入。");
   }
 }
