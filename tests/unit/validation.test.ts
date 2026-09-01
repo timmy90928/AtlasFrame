@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createUploadSchema, photoMetadataSchema } from "@/lib/validation/photo";
+import { createUploadSchema, detectSupportedImageContentType, photoMetadataSchema } from "@/lib/validation/photo";
 import { createPlaceSchema, setLocationSchema } from "@/lib/validation/place";
 import { normalizePlaceName, toSlug } from "@/lib/slug";
 
@@ -11,6 +11,13 @@ describe("upload validation", () => {
   it("rejects unsupported formats and files over 25 MB", () => {
     expect(() => createUploadSchema.parse({ filename: "raw.nef", contentType: "image/nef", size: 1 })).toThrow();
     expect(() => createUploadSchema.parse({ filename: "huge.jpg", contentType: "image/jpeg", size: 25 * 1024 * 1024 + 1 })).toThrow();
+  });
+
+  it("detects supported image formats from file signatures", () => {
+    expect(detectSupportedImageContentType(Uint8Array.from([0xff, 0xd8, 0xff]))).toBe("image/jpeg");
+    expect(detectSupportedImageContentType(Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe("image/png");
+    expect(detectSupportedImageContentType(Uint8Array.from([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]))).toBe("image/webp");
+    expect(detectSupportedImageContentType(Uint8Array.from([0, 1, 2]))).toBeNull();
   });
 
   it("keeps EXIF values independently valid from platform location", () => {

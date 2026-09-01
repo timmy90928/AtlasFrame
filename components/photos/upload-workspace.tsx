@@ -3,6 +3,7 @@
 import { ChangeEvent, useCallback, useState } from "react";
 import * as exifr from "exifr";
 import { AtlasMap } from "@/components/maps/atlas-map";
+import { detectSupportedImageContentType, type SupportedImageContentType } from "@/lib/validation/photo";
 
 type Exif = Record<string, unknown>;
 type Candidate = { id: string; name: string; latitude: number; longitude: number; distance_meters: number };
@@ -28,23 +29,26 @@ function extractMetadata(raw: Exif) {
 
 export function UploadWorkspace() {
   const [file, setFile] = useState<File>(); const [metadata, setMetadata] = useState<Record<string, unknown>>({});
+  const [contentType, setContentType] = useState<SupportedImageContentType>();
   const [photoId, setPhotoId] = useState<string>(); const [status, setStatus] = useState("選擇一張 JPEG、PNG 或 WebP 照片開始。"); const [error, setError] = useState<string>();
   const [lat, setLat] = useState(25.033); const [lng, setLng] = useState(121.5654); const [placeName, setPlaceName] = useState(""); const [candidates, setCandidates] = useState<Candidate[]>([]);
   const chooseFile = useCallback(async (nextFile: File) => {
-    setError(undefined); setFile(nextFile); setPhotoId(undefined); setStatus("正在讀取照片原始 EXIF…");
+    setError(undefined); setFile(undefined); setContentType(undefined); setPhotoId(undefined); setStatus("正在讀取照片原始 EXIF…");
     try {
-      if (!["image/jpeg", "image/png", "image/webp"].includes(nextFile.type)) throw new Error("目前只支援 JPEG、PNG、WebP。");
+      const detectedType = detectSupportedImageContentType(new Uint8Array(await nextFile.slice(0, 12).arrayBuffer()));
+      if (!detectedType) throw new Error("這不是受支援的 JPEG、PNG 或 WebP 影像檔。請確認不是 RAW、HEIC 或副檔名被誤改的檔案。");
       const raw = await exifr.parse(nextFile, { gps: true, tiff: true, exif: true, translateValues: false }) ?? {};
       const parsed = extractMetadata(raw);
+      setFile(nextFile); setContentType(detectedType);
       setMetadata(parsed);
       if (typeof parsed.originalLatitude === "number" && typeof parsed.originalLongitude === "number") { setLat(parsed.originalLatitude); setLng(parsed.originalLongitude); }
       setStatus("EXIF 已保留在瀏覽器中，尚未上傳。確認後可直接傳至私有 R2。");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "無法讀取照片資訊。"); setStatus("請選擇另一張照片。"); }
   }, []);
   async function upload() {
-    if (!file) return; setError(undefined); setStatus("正在保留儲存空間並建立安全上傳網址…");
+    if (!file || !contentType) return; setError(undefined); setStatus("正在保留儲存空間並建立安全上傳網址…");
     try {
-      const created = await api<UploadResponse>("/api/uploads/create", { method: "POST", body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }) });
+      const created = await api<UploadResponse>("/api/uploads/create", { method: "POST", body: JSON.stringify({ filename: file.name, contentType, size: file.size }) });
       setStatus("正在直接上傳至私有 R2…");
       const uploaded = await fetch(created.uploadUrl, { method: "PUT", headers: created.requiredHeaders, body: file });
       if (!uploaded.ok) throw new Error("R2 拒絕上傳；請確認 bucket CORS 與 signed URL 設定。");
@@ -71,5 +75,5 @@ export function UploadWorkspace() {
       else setError(conflict.message);
     }
   }
-  return <div className="upload-grid"><section className="panel"><div className="eyebrow">01 / Original photo</div><div className="drop-zone"><label><strong>{file ? file.name : "把一張照片放進地圖"}</strong><span className="muted">{file ? `${Math.round(file.size / 1024 / 1024 * 10) / 10} MB · ${file.type}` : "點擊選擇檔案。影像不會經過 AtlasFrame app server。"}</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event: ChangeEvent<HTMLInputElement>) => { const next = event.target.files?.[0]; if (next) void chooseFile(next); }} /></label></div><div className="form-stack"><button className="button" disabled={!file || Boolean(photoId)} onClick={() => void upload()}>{photoId ? "照片已上傳" : "直接上傳至私有 R2"}</button><p className={`status ${error ? "error" : ""}`}>{error ?? status}</p></div></section><section className="panel"><div className="eyebrow">02 / Canonical place</div><p className="muted">EXIF GPS 只提供建議。拖曳或點擊地圖、選擇既有地點，或手動建立 Place 都不會覆寫原始 GPS。</p><div className="location-grid"><div className="form-stack"><label className="field">Place 名稱<input value={placeName} onChange={(event) => setPlaceName(event.target.value)} placeholder="例如：Taipei 101" /></label><label className="field">緯度<input type="number" value={lat} onChange={(event) => setLat(Number(event.target.value))} /></label><label className="field">經度<input type="number" value={lng} onChange={(event) => setLng(Number(event.target.value))} /></label><button className="button ghost" disabled={!photoId || !placeName} onClick={() => void searchPlace()}>搜尋相近 Place</button><button className="button" disabled={!photoId || !placeName} onClick={() => void assignPlace()}>建立並指定 Place</button>{candidates.length > 0 && <ul className="suggestions">{candidates.map((candidate) => <li key={candidate.id}><button onClick={() => void assignPlace(candidate.id)}><span>{candidate.name}</span><small>{Math.round(candidate.distance_meters)}m</small></button></li>)}</ul>}</div><AtlasMap onPick={({ lat: pickedLat, lng: pickedLng }) => { setLat(pickedLat); setLng(pickedLng); }} /></div></section></div>;
+  return <div className="upload-grid"><section className="panel"><div className="eyebrow">01 / Original photo</div><div className="drop-zone"><label><strong>{file ? file.name : "把一張照片放進地圖"}</strong><span className="muted">{file && contentType ? `${Math.round(file.size / 1024 / 1024 * 10) / 10} MB · ${contentType}` : "點擊選擇檔案。影像不會經過 AtlasFrame app server。"}</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event: ChangeEvent<HTMLInputElement>) => { const next = event.target.files?.[0]; if (next) void chooseFile(next); }} /></label></div><div className="form-stack"><button className="button" disabled={!file || !contentType || Boolean(photoId)} onClick={() => void upload()}>{photoId ? "照片已上傳" : "直接上傳至私有 R2"}</button><p className={`status ${error ? "error" : ""}`}>{error ?? status}</p></div></section><section className="panel"><div className="eyebrow">02 / Canonical place</div><p className="muted">EXIF GPS 只提供建議。拖曳或點擊地圖、選擇既有地點，或手動建立 Place 都不會覆寫原始 GPS。</p><div className="location-grid"><div className="form-stack"><label className="field">Place 名稱<input value={placeName} onChange={(event) => setPlaceName(event.target.value)} placeholder="例如：Taipei 101" /></label><label className="field">緯度<input type="number" value={lat} onChange={(event) => setLat(Number(event.target.value))} /></label><label className="field">經度<input type="number" value={lng} onChange={(event) => setLng(Number(event.target.value))} /></label><button className="button ghost" disabled={!photoId || !placeName} onClick={() => void searchPlace()}>搜尋相近 Place</button><button className="button" disabled={!photoId || !placeName} onClick={() => void assignPlace()}>建立並指定 Place</button>{candidates.length > 0 && <ul className="suggestions">{candidates.map((candidate) => <li key={candidate.id}><button onClick={() => void assignPlace(candidate.id)}><span>{candidate.name}</span><small>{Math.round(candidate.distance_meters)}m</small></button></li>)}</ul>}</div><AtlasMap onPick={({ lat: pickedLat, lng: pickedLng }) => { setLat(pickedLat); setLng(pickedLng); }} /></div></section></div>;
 }
