@@ -12,7 +12,17 @@ export function ok(data: unknown, init: ResponseInit = {}) {
 
 export function handleApiError(error: unknown) {
   if (error instanceof ApiError) return Response.json({ error: { code: error.code, message: error.message, details: error.details } }, { status: error.status });
-  if (error instanceof ZodError) return Response.json({ error: { code: "VALIDATION_ERROR", message: "輸入內容不符合格式。", details: { issues: error.issues } } }, { status: 400 });
+  if (error instanceof ZodError) {
+    const issue = error.issues[0];
+    const field = issue?.path.join(".") || "input";
+    const messageByField: Record<string, string> = {
+      filename: "檔案名稱無效或過長。",
+      contentType: "照片格式只能是 JPEG、PNG 或 WebP。",
+      size: "照片大小必須介於 1 byte 與 25 MB 之間。",
+    };
+    const message = messageByField[field] ?? `欄位「${field}」的格式無法處理。`;
+    return Response.json({ error: { code: "VALIDATION_ERROR", message, details: { issues: error.issues } } }, { status: 400 });
+  }
   const message = error instanceof Error ? error.message : "發生未預期的錯誤。";
   console.error(error);
   return Response.json({ error: { code: "INTERNAL_ERROR", message } }, { status: 500 });

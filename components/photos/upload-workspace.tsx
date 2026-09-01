@@ -11,6 +11,7 @@ type ApiResponse<T> = { data?: T; error?: { message?: string; code?: string; det
 type UploadResponse = { photoId: string; uploadUrl: string; expiresAt: string; requiredHeaders: Record<string, string> };
 type SearchResponse = { places: Candidate[] };
 type CreatePlaceResponse = { place: { id: string } };
+const maxUploadBytes = 25 * 1024 * 1024;
 
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { ...init, headers: { ...(init.headers ?? {}), ...(init.body ? { "content-type": "application/json" } : {}) } });
@@ -20,11 +21,21 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body.data;
 }
 
+function nullableString(value: unknown) { return typeof value === "string" ? value : null; }
+function nullableNumber(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? value : null; }
+function nullableInteger(value: unknown) { return typeof value === "number" && Number.isInteger(value) ? value : null; }
+
 function extractMetadata(raw: Exif) {
-  const lat = typeof raw.latitude === "number" ? raw.latitude : null;
-  const lng = typeof raw.longitude === "number" ? raw.longitude : null;
+  const lat = nullableNumber(raw.latitude);
+  const lng = nullableNumber(raw.longitude);
   const date = raw.DateTimeOriginal instanceof Date ? raw.DateTimeOriginal.toISOString() : null;
-  return { cameraMake: raw.Make ?? null, cameraModel: raw.Model ?? null, lensModel: raw.LensModel ?? null, focalLength: raw.FocalLength ?? null, aperture: raw.FNumber ?? null, shutterSeconds: raw.ExposureTime ?? null, iso: raw.ISO ?? null, originalCapturedAt: date, originalLatitude: lat, originalLongitude: lng, orientation: raw.Orientation ?? null, width: raw.ExifImageWidth ?? raw.ImageWidth ?? null, height: raw.ExifImageHeight ?? raw.ImageHeight ?? null, rawExif: raw };
+  return {
+    cameraMake: nullableString(raw.Make), cameraModel: nullableString(raw.Model), lensModel: nullableString(raw.LensModel),
+    focalLength: nullableNumber(raw.FocalLength), aperture: nullableNumber(raw.FNumber), shutterSeconds: nullableNumber(raw.ExposureTime),
+    iso: nullableInteger(raw.ISO), originalCapturedAt: date, originalLatitude: lat, originalLongitude: lng,
+    orientation: nullableInteger(raw.Orientation), width: nullableInteger(raw.ExifImageWidth) ?? nullableInteger(raw.ImageWidth),
+    height: nullableInteger(raw.ExifImageHeight) ?? nullableInteger(raw.ImageHeight), rawExif: raw,
+  };
 }
 
 export function UploadWorkspace() {
@@ -37,6 +48,7 @@ export function UploadWorkspace() {
     try {
       const detectedType = detectSupportedImageContentType(new Uint8Array(await nextFile.slice(0, 12).arrayBuffer()));
       if (!detectedType) throw new Error("這不是受支援的 JPEG、PNG 或 WebP 影像檔。請確認不是 RAW、HEIC 或副檔名被誤改的檔案。");
+      if (nextFile.size > maxUploadBytes) throw new Error(`這張照片為 ${(nextFile.size / 1024 / 1024).toFixed(1)} MB；目前單張上限為 25 MB。請先縮小檔案後再上傳。`);
       const raw = await exifr.parse(nextFile, { gps: true, tiff: true, exif: true, translateValues: false }) ?? {};
       const parsed = extractMetadata(raw);
       setFile(nextFile); setContentType(detectedType);
