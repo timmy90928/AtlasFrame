@@ -26,5 +26,9 @@ export function CallbackClient() {
     window.location.assign("/upload");
   }
   if (step === "create") return <form className="form-stack" onSubmit={createProfile}><p className="status">{message}</p><label className="field">使用者名稱 <input value={username} onChange={(event) => setUsername(event.target.value.toLowerCase())} pattern="[a-z0-9][a-z0-9_-]{2,31}" minLength={3} maxLength={32} required placeholder="your-name" /></label><button className="button">建立個人地圖</button></form>;
-  return <p className={`status ${step === "error" ? "error" : ""}`} role="status">{message}</p>;
+  if (step === "error") {
+    const retryLogin = message.includes("登入");
+    return <div className="form-stack"><p className="status error" role="status">{message}</p>{retryLogin ? <a className="button" href="/login">重新登入</a> : null}</div>;
+  }
+  return <p className="status" role="status">{message}</p>;
 }
