@@ -1,11 +1,13 @@
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { createLocalJWKSet, jwtVerify, type JSONWebKeySet } from "jose";
 import { getAuthRuntimeEnv } from "@/lib/env";
 import { ApiError } from "@/lib/http";
 import { createAdminClient } from "@/lib/supabase/server";
 
 const sessionCookie = "__Host-atlasframe_access";
-let remoteJwks: ReturnType<typeof createRemoteJWKSet> | undefined;
-let remoteJwksOrigin: string | undefined;
+const jwksRefreshMs = 5 * 60 * 1000;
+let localJwks: ReturnType<typeof createLocalJWKSet> | undefined;
+let localJwksOrigin: string | undefined;
+let localJwksLoadedAt = 0;
 
 export type AuthenticatedUser = {
   subject: string;
@@ -30,16 +32,35 @@ function authSubject(origin: string, subject: string) {
   return `${new URL(origin).host}:${subject}`;
 }
 
+function invalidAccessTokenError(error: unknown) {
+  const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+  if (code === "ERR_JWT_EXPIRED") return new ApiError(401, "AUTH_TOKEN_EXPIRED", "登入憑證已過期，請重新登入。");
+  if (code === "ERR_JWS_INVALID") return new ApiError(401, "AUTH_TOKEN_SIGNATURE_INVALID", "登入憑證的簽章無法驗證，請重新登入。");
+  if (code === "ERR_JWT_CLAIM_VALIDATION_FAILED") return new ApiError(401, "AUTH_TOKEN_CLAIMS_INVALID", "登入憑證不適用於 AtlasFrame，請重新登入。");
+  if (code === "ERR_JWKS_NO_MATCHING_KEY" || code === "ERR_JWKS_INVALID") return new ApiError(503, "AUTH_JWKS_UNAVAILABLE", "帳號服務的驗證金鑰暫時無法使用，請稍後再試。");
+  return new ApiError(401, "AUTH_INVALID", "登入狀態已失效，請重新登入。");
+}
+
+async function getAuthJwks(origin: string): Promise<ReturnType<typeof createLocalJWKSet>> {
+  if (localJwks && localJwksOrigin === origin && Date.now() - localJwksLoadedAt < jwksRefreshMs) return localJwks;
+  const response = await fetch(new URL("/api/auth/jwks.json", origin), {
+    headers: { accept: "application/json, application/jwk-set+json" },
+  });
+  if (!response.ok) throw new ApiError(503, "AUTH_JWKS_UNAVAILABLE", "帳號服務的驗證金鑰暫時無法使用，請稍後再試。");
+  const jwks = await response.json() as JSONWebKeySet;
+  localJwks = createLocalJWKSet(jwks);
+  localJwksOrigin = origin;
+  localJwksLoadedAt = Date.now();
+  return localJwks;
+}
+
 export async function requireUser(request: Request): Promise<AuthenticatedUser> {
   const token = accessToken(request);
   if (!token) throw new ApiError(401, "AUTH_REQUIRED", "請先登入後再繼續。");
   const runtime = getAuthRuntimeEnv();
-  if (!remoteJwks || remoteJwksOrigin !== runtime.AUTH_API_ORIGIN) {
-    remoteJwksOrigin = runtime.AUTH_API_ORIGIN;
-    remoteJwks = createRemoteJWKSet(new URL("/api/auth/jwks.json", runtime.AUTH_API_ORIGIN));
-  }
   try {
-    const { payload } = await jwtVerify(token, remoteJwks, { audience: runtime.AUTH_CLIENT_ID, algorithms: ["ES256"] });
+    const jwks = await getAuthJwks(runtime.AUTH_API_ORIGIN);
+    const { payload } = await jwtVerify(token, jwks, { audience: runtime.AUTH_CLIENT_ID, algorithms: ["ES256"] });
     const subject = typeof payload.sub === "string" ? payload.sub : "";
     const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
     if (!subject || !email) throw new ApiError(401, "AUTH_INVALID", "登入憑證缺少必要身分資訊，請重新登入。");
@@ -48,7 +69,7 @@ export async function requireUser(request: Request): Promise<AuthenticatedUser> 
   } catch (error) {
     if (error instanceof ApiError) throw error;
     console.warn("AtlasFrame access token validation failed", { name: error instanceof Error ? error.name : "UnknownError" });
-    throw new ApiError(401, "AUTH_INVALID", "登入狀態已失效，請重新登入。");
+    throw invalidAccessTokenError(error);
   }
 }
 
