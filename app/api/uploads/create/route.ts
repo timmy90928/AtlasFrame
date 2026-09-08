@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { requireProfile } from "@/lib/auth/request";
-import { createSignedUploadUrl } from "@/lib/r2/presign";
-import { fromSupabaseError, handleApiError, ok } from "@/lib/http";
+import { createSignedUploadUrl, verifyR2UploadConfiguration } from "@/lib/r2/presign";
+import { ApiError, fromSupabaseError, handleApiError, ok } from "@/lib/http";
 import { createAdminClient } from "@/lib/supabase/server";
 import { createUploadSchema } from "@/lib/validation/photo";
 
@@ -11,6 +11,12 @@ export async function POST(request: Request) {
   try {
     const user = await requireProfile(request);
     const input = createUploadSchema.parse(await request.json());
+    try {
+      await verifyR2UploadConfiguration();
+    } catch (error) {
+      console.error("R2 S3 credential verification failed", error);
+      throw new ApiError(503, "R2_UPLOAD_UNAVAILABLE", "R2 上傳設定無法驗證。請確認 Account ID 與 R2 S3 API Token 的 bucket 權限。");
+    }
     const photoId = randomUUID();
     const assetId = randomUUID();
     const extension = input.contentType.split("/")[1];
