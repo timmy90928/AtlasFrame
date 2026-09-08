@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SessionBridge } from "@/components/auth/session-bridge";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-Hant"><body>{children}</body></html>;
+  return <html lang="zh-Hant"><body><SessionBridge />{children}</body></html>;
 }

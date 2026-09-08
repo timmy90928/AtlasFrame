@@ -2,15 +2,20 @@
 
 ## 1. Supabase
 
-1. 建立 Tokyo region project，啟用 Google OAuth，並將 `https://YOUR_DOMAIN/auth/callback` 加入 redirect URLs。
-2. 在 SQL Editor 執行 `db/migrations/0000_atlasframe_foundation.sql`。
-3. 在 `alpha_allowlist` 新增受邀 email：
+1. 依序執行 `db/migrations/0000_atlasframe_foundation.sql` 至最新 migration。
+2. 在 Authentication → URL Configuration 設定 Site URL 為 `https://atlasframe.1888atch25.workers.dev`，並加入：
+   - `https://atlasframe.1888atch25.workers.dev/auth/callback`
+   - `https://atlasframe.1888atch25.workers.dev/auth/reset-password`
+3. 在 Authentication → Providers 啟用 Email，開啟 Confirm email；Alpha 期間不要提供公開 sign-up UI。
+4. 在 Google Cloud OAuth Client 加入 Supabase 提供的 callback URI：`https://wkocqkuunffscbxtzhxa.supabase.co/auth/v1/callback`。接著在 Authentication → Providers → Google 啟用 Provider，填入同一組 Client ID 與 Client Secret。保留既有 external API 的 redirect URI，不要移除。
+5. 在 `alpha_allowlist` 新增受邀 email：
 
 ```sql
 insert into alpha_allowlist (email, note) values ('you@example.com', 'Alpha owner');
 ```
 
-4. 將 Project URL、Publishable key、Secret key 設為 Worker secrets。Secret key 僅可在 Worker server route 使用，不能設定為 `NEXT_PUBLIC_*`。
+6. 在 Authentication → Users 為帳密使用者建立或邀請帳號；既有外部帳密無法讀取時，改由使用者用「忘記密碼」完成重設。Google 使用者首次完成 Supabase 登入時，AtlasFrame 會以已驗證 email 連結既有 Profile。
+7. 將 Project URL、Publishable key、Secret key 設為 Worker secrets。Secret key 僅可在 Worker server route 使用，不能設定為 `NEXT_PUBLIC_*`。
 
 ## 2. Cloudflare
 
@@ -24,7 +29,7 @@ insert into alpha_allowlist (email, note) values ('you@example.com', 'Alpha owne
 
 1. `pnpm typecheck && pnpm lint && pnpm test && pnpm build`
 2. `pnpm start` 驗證 Workers runtime。
-3. Google OAuth → allowlist → Profile → JPEG direct upload → R2 object head → complete。
+3. Google OAuth、帳密登入、忘記密碼 → allowlist → Profile → JPEG direct upload → R2 object head → complete。
 4. 建立 Place，指定給照片，確認第二張指定同 Place 得到 HTTP 409；確認取代後舊照片失去 Place 關聯。
 5. 以未登入瀏覽器驗證公開照片和精確位置地圖可見；確認 R2 object key 及原始檔 URL 無法直接存取。
 

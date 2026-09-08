@@ -13,17 +13,9 @@ const runtimeSchema = databaseRuntimeSchema.extend({
   R2_SECRET_ACCESS_KEY: z.string().min(1),
   R2_BUCKET_NAME: z.string().min(1),
   APP_ORIGIN: z.url(),
-  AUTH_API_ORIGIN: z.url(),
-  AUTH_CLIENT_ID: z.string().regex(/^[a-z0-9][a-z0-9_-]{2,63}$/),
 });
 
 const publicRuntimeSchema = databaseRuntimeSchema.pick({ SUPABASE_URL: true, SUPABASE_PUBLISHABLE_KEY: true });
-
-const authRuntimeSchema = z.object({
-  APP_ORIGIN: z.url(),
-  AUTH_API_ORIGIN: z.url(),
-  AUTH_CLIENT_ID: z.string().regex(/^[a-z0-9][a-z0-9_-]{2,63}$/),
-});
 
 export type RuntimeEnv = z.infer<typeof runtimeSchema>;
 export type DatabaseRuntimeEnv = z.infer<typeof databaseRuntimeSchema>;
@@ -41,14 +33,6 @@ export function getPublicRuntimeEnv() {
   return publicRuntimeSchema.parse(cloudflareEnv);
 }
 
-export function getAuthRuntimeEnv() {
-  return authRuntimeSchema.parse(cloudflareEnv);
-}
-
 export function getBindings(): Pick<CloudflareEnv, "PHOTOS_BUCKET" | "IMAGES"> {
   return cloudflareEnv as unknown as Pick<CloudflareEnv, "PHOTOS_BUCKET" | "IMAGES">;
-}
-
-export function getAuthService(): CloudflareEnv["AUTH_SERVICE"] {
-  return (cloudflareEnv as unknown as CloudflareEnv).AUTH_SERVICE;
 }

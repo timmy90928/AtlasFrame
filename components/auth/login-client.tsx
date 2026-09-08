@@ -1,41 +1,52 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-
-type LoginResponse = { data?: { mfaRequired?: boolean; challenge?: string }; error?: { message?: string } };
-
-async function post(path: string, body: Record<string, string>) {
-  const response = await fetch(path, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const payload = await response.json() as LoginResponse;
-  if (!response.ok) throw new Error(payload.error?.message ?? "登入失敗。 ");
-  return payload.data ?? {};
-}
+import { createBrowserSupabaseClient, syncAtlasframeSession } from "@/lib/supabase/browser";
 
 export function LoginClient() {
-  const [identifier, setIdentifier] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [challenge, setChallenge] = useState<string>();
-  const [code, setCode] = useState("");
   const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
   const [loading, setLoading] = useState(false);
 
   async function signIn(event: FormEvent) {
-    event.preventDefault(); setLoading(true); setError(undefined);
+    event.preventDefault(); setLoading(true); setError(undefined); setNotice(undefined);
     try {
-      const result = await post("/api/auth/login", { identifier, password });
-      if (result.mfaRequired && result.challenge) { setChallenge(result.challenge); return; }
+      const supabase = await createBrowserSupabaseClient();
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError || !data.session) throw new Error(signInError?.message ?? "無法完成登入。");
+      await syncAtlasframeSession(data.session.access_token);
       window.location.assign("/auth/callback");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "無法完成登入。"); }
     finally { setLoading(false); }
   }
 
-  async function completeMfa(event: FormEvent) {
-    event.preventDefault(); if (!challenge) return; setLoading(true); setError(undefined);
-    try { await post("/api/auth/mfa", { challenge, code }); window.location.assign("/auth/callback"); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "驗證失敗。"); }
+  async function signInWithGoogle() {
+    setLoading(true); setError(undefined); setNotice(undefined);
+    try {
+      const supabase = await createBrowserSupabaseClient();
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}/auth/callback` },
+      });
+      if (oauthError) throw new Error(oauthError.message);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "無法啟動 Google 登入。"); setLoading(false); }
+  }
+
+  async function requestPasswordReset() {
+    if (!email) { setError("請先輸入 Email。 "); return; }
+    setLoading(true); setError(undefined); setNotice(undefined);
+    try {
+      const supabase = await createBrowserSupabaseClient();
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      });
+      if (resetError) throw new Error(resetError.message);
+      setNotice("若此 Email 已受邀，我們已寄出重設密碼連結。 ");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "無法寄出重設密碼信。"); }
     finally { setLoading(false); }
   }
 
-  if (challenge) return <form className="form-stack" onSubmit={completeMfa}><p className="muted">請輸入驗證器 App 的六位數代碼。</p><label className="field">MFA 驗證碼<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} required /></label><button className="button" disabled={loading}>{loading ? "驗證中…" : "完成登入"}</button>{error && <p className="status error" role="alert">{error}</p>}</form>;
-  return <div className="form-stack"><a className="button" href="/api/auth/google">以 Google 帳號登入</a><div className="auth-divider"><span>或使用帳號密碼</span></div><form className="form-stack" onSubmit={signIn}><label className="field">Email 或使用者名稱<input autoComplete="username" value={identifier} onChange={(event) => setIdentifier(event.target.value)} required /></label><label className="field">密碼<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label><button className="button ghost" disabled={loading}>{loading ? "登入中…" : "以帳號密碼登入"}</button></form><p className="muted">AtlasFrame Alpha 目前僅開放受邀帳號。登入後會確認 email 是否在 allowlist 中。</p>{error && <p className="status error" role="alert">{error}</p>}</div>;
+  return <div className="form-stack"><button className="button" disabled={loading} onClick={() => void signInWithGoogle()}>{loading ? "登入中…" : "以 Google 帳號登入"}</button><div className="auth-divider"><span>或使用帳號密碼</span></div><form className="form-stack" onSubmit={signIn}><label className="field">Email<input autoComplete="email" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label className="field">密碼<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label><button className="button ghost" disabled={loading}>{loading ? "登入中…" : "以帳號密碼登入"}</button></form><button className="link-button" type="button" disabled={loading} onClick={() => void requestPasswordReset()}>忘記密碼？</button><p className="muted">AtlasFrame Alpha 目前僅開放受邀帳號。登入後會確認 email 是否在 allowlist 中。</p>{notice && <p className="status" role="status">{notice}</p>}{error && <p className="status error" role="alert">{error}</p>}</div>;
 }

@@ -31,6 +31,7 @@ export const profiles = pgTable("profiles", {
   id: uuid().primaryKey(),
   authSubject: varchar("auth_subject", { length: 255 }).unique(),
   authEmail: varchar("auth_email", { length: 320 }),
+  authUserId: uuid("auth_user_id"),
   username: varchar({ length: 32 }).notNull().unique(),
   displayName: varchar("display_name", { length: 80 }),
   avatarKey: varchar("avatar_key", { length: 512 }),
